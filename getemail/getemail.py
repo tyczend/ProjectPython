@@ -1,0 +1,247 @@
+import imaplib
+import email
+import datetime
+import schedule
+import time
+import ftplib
+import os
+import configparser
+
+
+# 스케줄러 상태
+gb_login_status = True
+gb_count = 0
+
+
+# 인코딩된 데이터 획득
+def get_encoding_msg(txt):
+    data, encode = find_encoding_info(txt)
+    if encode is None:
+        msg = str(data)
+    else:
+        msg = str(data, encode)
+
+    # 필터처리
+    msg = msg.replace('"', '')
+
+    return msg
+
+
+# 문자열의 인코딩 정보 추출 후, 문자열, 인코딩 얻기
+def find_encoding_info(txt):
+    info = email.header.decode_header(txt)
+    s, encoding = info[0]
+    return s, encoding
+
+
+# 메일을 받는 함수(imap4)
+def check_mail_imap(html_file_name, user, password):
+    # 설정 로드
+    config = load_conf('EMAIL')
+
+    try :
+        # imap server
+        imapsrv = config['imap_srv']
+        imapserver = imaplib.IMAP4_SSL(imapsrv, int(config['imap_port']))
+        imapserver.login(user, password)
+        imapserver.select('INBOX')
+        res, unseen_data = imapserver.search(None, 'ALL')
+
+        ids = unseen_data[0]
+        id_list = ids.split()
+
+        email_count = -int(config['get_count'])
+        latest_email_id = id_list[email_count:]
+        latest_email_id.reverse()
+    except Exception as ex:
+        print('[오류] : ', ex)
+        return False
+
+    # 이메일 수량 확인
+    if len(latest_email_id) == 0:
+        return False
+
+    # 메일 리스트 리스트
+    email_list = ""
+
+    # 템플릿 로드
+    f = open("./template_table.html", 'r', encoding="utf-8")
+    template_table_html= f.read()
+    f.close()
+
+    # 카운트
+    cnt = 1
+
+    # 메일리스트를 받아서 내용을 파일로 저장하는 함수
+    for each_mail in latest_email_id:
+        # 메일 raw 데이터 수신 처리
+        # fetch the email body (RFC822) for the given ID
+        result, data = imapserver.fetch(each_mail, "(RFC822)")
+        raw_email = data[0][1]
+        email_message = email.message_from_bytes(raw_email)
+
+        # 메일의 key 값 출력
+        # print(list(email_message.keys()))
+
+        # 메일 데이터
+        email_decoding = dict()
+
+
+        # 수신자 데이터 파싱
+        to_data = email_message['To'].replace('"', '')
+        to_data = to_data.split("<")
+        to_data[0] = to_data[0].strip()
+        if len(to_data) > 1:
+            to_data[1] = to_data[1].replace(">", "")
+        else:
+            to_data.append("")
+
+        # 발신자 데이터 파싱
+        from_data = email_message['From'].replace('"', '')
+        from_data = from_data.split("<")
+        from_data[0] = from_data[0].strip()
+        if len(from_data) > 1:
+            from_data[1] = from_data[1].replace(">", "")
+        else:
+            from_data.append("")
+
+        # 메일 데이터 재정의
+        email_decoding['FromName'] = get_encoding_msg(from_data[0])
+        email_decoding['FromEmail'] = from_data[1]
+        email_decoding['ToName'] = get_encoding_msg(to_data[0])
+        email_decoding['ToEmail'] = to_data[1]
+        email_decoding['Subject'] = get_encoding_msg(email_message['Subject'])
+        email_decoding['Date'] = email_message['Date']
+
+        # 시간 데이터 구조 문자열 배열화
+        date_type1 = email_message['Date'].split(" ")
+        date_type2 = [s.replace(',', '') for s in date_type1]
+        date_myformat = f'{date_type2[1]} {date_type2[2]} {date_type2[3]} {date_type2[4]}'
+
+        # 시간 포멧 데이터 변환
+        email_decoding['Date'] = f"{datetime.datetime.strptime(date_myformat, '%d %b %Y %H:%M:%S')}"
+
+        # 출력 테스트
+        # email_data = email_decoding['Date'] + " / "
+        # email_data = email_data + email_decoding['FromName'] + email_decoding['FromEmail'] + " / "
+        # email_data = email_data + email_decoding['Subject']
+        # print(email_data)
+
+        # 메일 리스트 추가
+        # email_list = email_list + email_data + "\n"
+
+        # HTML 변환
+        data_table = template_table_html
+        data_table = data_table.replace("##No##", str(cnt))
+        data_table = data_table.replace("##Date##", email_decoding['Date'])
+        data_table = data_table.replace("##FromName##", email_decoding['FromName'])
+        data_table = data_table.replace("##FromEmail##", email_decoding['FromEmail'])
+        data_table = data_table.replace("##Subject##", email_decoding['Subject'])
+        # print(data_table)
+
+        # 메일 리스트 추가
+        email_list = email_list + data_table + "\n"
+
+        # 카운트
+        cnt = cnt + 1
+
+    # email HTML 생성
+
+    # read template
+    f = open("./template_main.html", 'r', encoding="utf-8")
+    data_main = f.read()
+    f.close()
+
+    # 메인 HTML 적용
+    data_main = data_main.replace("##table_list##", email_list)
+
+    # 최종 결과 출력
+    # print(data_main)
+
+    # 파일 저장
+    f = open(html_file_name, "w", encoding="utf-8")
+    f.write(data_main)
+    f.close()
+
+    # 메일 연결 종료
+    imapserver.close()
+    imapserver.logout()
+
+    return True
+
+
+def upload_ftp(ftp_ip, ftp_id, ftp_pw, target_file_name , upload_file_name, upload_dir):
+    ftp = ftplib.FTP()
+    ftp.connect(ftp_ip, 21)
+    ftp.login(ftp_id, ftp_pw)
+    ftp.cwd(upload_dir)
+    os.chdir("./")
+    fd = open(target_file_name, 'rb')
+    ftp.storbinary('STOR ' + upload_file_name, fd)
+    fd.close()
+    ftp.close()
+
+
+def load_conf(type_name):
+    # 설정 로드
+    config = configparser.ConfigParser()
+    config.read('./getemail.conf', encoding='utf-8')
+    return config[type_name]
+
+
+def job():
+    # 설정 로드
+    config_email = load_conf('EMAIL')
+    config_ftp = load_conf('FTP')
+
+    # email 설정
+    email_id = config_email['id']
+    email_pw = config_email['pw']
+
+    # email 생성 파일명
+    email_file_name = config_email['file_name']
+
+    # email html 파일 생성
+    global gb_count
+    gb_count = gb_count + 1
+
+    print(f'[{datetime.datetime.today()}] 생성횟수 : {gb_count}', sep='')
+    global gb_login_status
+    gb_login_status = check_mail_imap(email_file_name, email_id, email_pw)
+
+    # email 파일 복사
+    if int(config_ftp['use']) == 1:
+        # ftp 설정 로드
+        ftp_ip = config_ftp['ip']
+        ftp_id = config_ftp['id']
+        ftp_pw = config_ftp['pw']
+        upload_file_name = config_ftp['upload_file_name']
+        upload_dir = config_ftp['upload_dir']
+        upload_ftp(ftp_ip, ftp_id, ftp_pw, email_file_name, upload_file_name, upload_dir)
+
+
+if __name__ == '__main__':
+    # 시작
+    print("이메일 목록 생성을 시작합니다.")
+    job()
+
+    # 설정 로드
+    config = load_conf('SCHEDULE')
+
+    # 스케줄러 등록
+    if config['unit'] == 's':
+        schedule.every(int(config['interval'])).seconds.do(job)
+    elif config['unit'] == 'm':
+        schedule.every(int(config['interval'])).minutes.do(job)
+    elif config['unit'] == 'h':
+        schedule.every(int(config['interval'])).hours.do(job)
+
+    # 스케줄링
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+        # 종료 처리
+        if not gb_login_status:
+            print("오류로 인하여 스케줄링을 종료 합니다.")
+            break;
