@@ -185,8 +185,7 @@ def check_mail_imap(html_file_name, user, password):
 
     # email HTML 생성
 
-    # read template
-    f = open("./template_main.html", 'r', encoding="utf-8")
+    # read template f = open("./template_main.html", 'r', encoding="utf-8")
     data_main = f.read()
     f.close()
 
