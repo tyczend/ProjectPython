@@ -3,7 +3,7 @@ import email
 import datetime
 import schedule
 import time
-import ftplib
+import paramiko
 import os
 import configparser
 
@@ -54,13 +54,13 @@ def check_mail_imap(html_file_name, user, password):
         imapserver.login(user, password)
         imapserver.select('INBOX')
         res, unseen_data = imapserver.search(None, 'ALL')
-
         ids = unseen_data[0]
         id_list = ids.split()
 
         email_count = -int(config['get_count'])
         latest_email_id = id_list[email_count:]
         latest_email_id.reverse()
+
     except Exception as ex:
         print('[메일 서버 오류] : ', ex)
         return True
@@ -184,8 +184,8 @@ def check_mail_imap(html_file_name, user, password):
         cnt = cnt + 1
 
     # email HTML 생성
-
-    # read template f = open("./template_main.html", 'r', encoding="utf-8")
+    # read template
+    f = open("./template_main.html", 'r', encoding="utf-8")
     data_main = f.read()
     f.close()
 
@@ -207,16 +207,30 @@ def check_mail_imap(html_file_name, user, password):
     return True
 
 
-def upload_ftp(ftp_ip, ftp_id, ftp_pw, target_file_name , upload_file_name, upload_dir):
-    ftp = ftplib.FTP()
-    ftp.connect(ftp_ip, 21)
-    ftp.login(ftp_id, ftp_pw)
-    ftp.cwd(upload_dir)
-    os.chdir("./")
-    fd = open(target_file_name, 'rb')
-    ftp.storbinary('STOR ' + upload_file_name, fd)
-    fd.close()
-    ftp.close()
+def upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, local_file_name , upload_file_name):
+    # Open a transport
+    transport = paramiko.Transport((ftp_ip, ftp_port))
+
+    # Auth
+    transport.connect(username=ftp_id, password=ftp_pw)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+
+    # upload
+    sftp.put(local_file_name, upload_file_name)
+
+    # Close
+    sftp.close()
+    transport.close()
+
+    # ftp = ftplib.FTP()
+    # ftp.connect(ftp_ip, ftp_port)
+    # ftp.login(ftp_id, ftp_pw)
+    # ftp.cwd(upload_dir)
+    # os.chdir("./")
+    # fd = open(target_file_name, 'rb')
+    # ftp.storbinary('STOR ' + upload_file_name, fd)
+    # fd.close()
+    # ftp.close()
 
 
 def load_conf(type_name):
@@ -250,11 +264,11 @@ def job():
     if int(config_ftp['use']) == 1:
         # ftp 설정 로드
         ftp_ip = config_ftp['ip']
+        ftp_port = int(config_ftp['port'])
         ftp_id = config_ftp['id']
         ftp_pw = config_ftp['pw']
         upload_file_name = config_ftp['upload_file_name']
-        upload_dir = config_ftp['upload_dir']
-        upload_ftp(ftp_ip, ftp_id, ftp_pw, email_file_name, upload_file_name, upload_dir)
+        upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, email_file_name, upload_file_name)
 
 
 if __name__ == '__main__':
