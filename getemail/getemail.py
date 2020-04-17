@@ -16,13 +16,21 @@ gb_count = 0
 # 인코딩된 데이터 획득
 def get_encoding_msg(txt):
     data, encode = find_encoding_info(txt)
-    if encode is None:
-        msg = str(data)
-    else:
-        msg = str(data, encode)
 
-    # 필터처리
-    msg = msg.replace('"', '')
+    try:
+        if encode is None:
+            msg = str(data)
+        else:
+            msg = str(data, encode)
+
+        # 필터처리
+        msg = msg.replace('"', '')
+
+    except Exception as ex:
+        msg = None
+        print('[오류] :', ex)
+
+    # print('encoding:', encode, msg)
 
     return msg
 
@@ -54,12 +62,13 @@ def check_mail_imap(html_file_name, user, password):
         latest_email_id = id_list[email_count:]
         latest_email_id.reverse()
     except Exception as ex:
-        print('[오류] : ', ex)
-        return False
+        print('[메일 서버 오류] : ', ex)
+        return True
 
     # 이메일 수량 확인
     if len(latest_email_id) == 0:
-        return False
+        print('수신된 메일이 없습니다.')
+        return True
 
     # 메일 리스트 리스트
     email_list = ""
@@ -86,24 +95,42 @@ def check_mail_imap(html_file_name, user, password):
         # 메일 데이터
         email_decoding = dict()
 
-
         # 수신자 데이터 파싱
-        to_data = email_message['To'].replace('"', '')
-        to_data = to_data.split("<")
-        to_data[0] = to_data[0].strip()
-        if len(to_data) > 1:
-            to_data[1] = to_data[1].replace(">", "")
-        else:
-            to_data.append("")
+        try:
+            to_data = email_message['To'].replace('"', '')
+            to_data = to_data.split("<")
+            to_data[0] = to_data[0].strip()
+
+            if len(to_data) > 1:
+                to_data[1] = to_data[1].replace(">", "")
+            else:
+                to_data.append("")
+        except Exception as ex:
+            print('[오류] :', ex, 'email data[To]', email_message['To'])
+            to_data=['', '']
 
         # 발신자 데이터 파싱
-        from_data = email_message['From'].replace('"', '')
-        from_data = from_data.split("<")
-        from_data[0] = from_data[0].strip()
-        if len(from_data) > 1:
-            from_data[1] = from_data[1].replace(">", "")
-        else:
-            from_data.append("")
+        try:
+            from_data = email_message['From'].replace('"', '')
+            from_data = from_data.split("<")
+            from_data[0] = from_data[0].strip()
+
+            if len(from_data) > 1:
+                from_data[1] = from_data[1].replace(">", "")
+            else:
+                from_data.append("")
+        except Exception as ex:
+            print('[오류] :', ex, 'email data[From] > ', email_message['From'])
+            from_data = ['', '']
+
+        # print('email To:',  email_message['To'])
+        # print('email to data0:', to_data[0], 'email to data1:', to_data[1])
+        # print('')
+        # print('email from:',  email_message['From'])
+        # print('email from data0:', from_data[0], 'email from data1:', from_data[1])
+        # print('email Date', email_message['Date'])
+        # print(from_data[0])
+        # print(from_data[1])
 
         # 메일 데이터 재정의
         email_decoding['FromName'] = get_encoding_msg(from_data[0])
@@ -113,31 +140,42 @@ def check_mail_imap(html_file_name, user, password):
         email_decoding['Subject'] = get_encoding_msg(email_message['Subject'])
         email_decoding['Date'] = email_message['Date']
 
-        # 시간 데이터 구조 문자열 배열화
-        date_type1 = email_message['Date'].split(" ")
-        date_type2 = [s.replace(',', '') for s in date_type1]
-        date_myformat = f'{date_type2[1]} {date_type2[2]} {date_type2[3]} {date_type2[4]}'
+        # print('ToName:', email_decoding['ToName'])
+        # print('Subject:', email_decoding['Subject'])
+        # print('Date:', email_decoding['Date'])
+        # print('=============================')
 
-        # 시간 포멧 데이터 변환
-        email_decoding['Date'] = f"{datetime.datetime.strptime(date_myformat, '%d %b %Y %H:%M:%S')}"
+        # 시간 데이터 구조 문자열 배열화
+        if email_decoding['Date'] is not None:
+            date_type1 = email_message['Date'].split(" ")
+            date_type2 = [s.replace(',', '') for s in date_type1]
+            date_myformat = f'{date_type2[1]} {date_type2[2]} {date_type2[3]} {date_type2[4]}'
+
+            # 시간 포멧 데이터 변환
+            try:
+                email_decoding['Date'] = f"{datetime.datetime.strptime(date_myformat, '%d %b %Y %H:%M:%S')}"
+            except Exception as ex:
+                email_decoding['Date'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print('[오류] :', ex)
+        else:
+            email_decoding['Date'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         # 출력 테스트
         # email_data = email_decoding['Date'] + " / "
         # email_data = email_data + email_decoding['FromName'] + email_decoding['FromEmail'] + " / "
         # email_data = email_data + email_decoding['Subject']
         # print(email_data)
-
-        # 메일 리스트 추가
-        # email_list = email_list + email_data + "\n"
+        # print(email_decoding['Date'])
 
         # HTML 변환
-        data_table = template_table_html
-        data_table = data_table.replace("##No##", str(cnt))
-        data_table = data_table.replace("##Date##", email_decoding['Date'])
-        data_table = data_table.replace("##FromName##", email_decoding['FromName'])
-        data_table = data_table.replace("##FromEmail##", email_decoding['FromEmail'])
-        data_table = data_table.replace("##Subject##", email_decoding['Subject'])
-        # print(data_table)
+        if email_decoding['Date'] is not None and email_decoding['FromName'] is not None and email_decoding['FromEmail'] is not None and email_decoding['Subject'] is not None:
+            data_table = template_table_html
+            data_table = data_table.replace("##No##", str(cnt))
+            data_table = data_table.replace("##Date##", email_decoding['Date'])
+            data_table = data_table.replace("##FromName##", email_decoding['FromName'])
+            data_table = data_table.replace("##FromEmail##", email_decoding['FromEmail'])
+            data_table = data_table.replace("##Subject##", email_decoding['Subject'])
+            # print(data_table)
 
         # 메일 리스트 추가
         email_list = email_list + data_table + "\n"
