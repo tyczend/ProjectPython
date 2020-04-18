@@ -4,9 +4,8 @@ import datetime
 import schedule
 import time
 import paramiko
-import os
 import configparser
-
+import imap_tools.imap_utf7 as imap_utf7
 
 # 스케줄러 상태
 gb_login_status = True
@@ -28,7 +27,7 @@ def get_encoding_msg(txt):
 
     except Exception as ex:
         msg = None
-        print('[오류] :', ex)
+        print('[Encoding] :', ex)
 
     # print('encoding:', encode, msg)
 
@@ -42,22 +41,60 @@ def find_encoding_info(txt):
     return s, encoding
 
 
-# 메일을 받는 함수(imap4)
-def check_mail_imap(html_file_name, user, password):
-    # 설정 로드
-    config = load_conf('EMAIL')
+# 메일을 생성 (imap4)
+def create_email_imap(imap_srv, imap_port, id, pw, mail_box, get_count, output_file):
+
+    # define mail config
+    config_email = dict()
+    config_email['imap_srv'] = imap_srv
+    config_email['imap_port'] = imap_port
+    config_email['id'] = id
+    config_email['pw'] = pw
+    config_email['mail_box'] = mail_box
+    config_email['get_count'] = get_count
+    config_email['output_file'] = output_file
 
     try :
-        # imap server
-        imapsrv = config['imap_srv']
-        imapserver = imaplib.IMAP4_SSL(imapsrv, int(config['imap_port']))
-        imapserver.login(user, password)
-        imapserver.select('INBOX')
+        # imap server 접속
+        imapsrv = config_email['imap_srv']
+        imapserver = imaplib.IMAP4_SSL(imapsrv, int(config_email['imap_port']))
+        imapserver.login(config_email['id'], config_email['pw'])
+
+        # mail box 폴더 목록 얻기
+        root_folders = []
+        res, mail_boxs = imapserver.list('""', '*')
+        for mbox in mail_boxs:
+            flags, separator, name = parse_mailbox(bytes.decode(mbox))
+            # print(f'{name_decodeing} {name}    : [Flags = {flags}; Separator = {separator}')
+
+            # imap utf7 타입으로 디코딩
+            name_decodeing = imap_utf7.decode(name.encode())
+            if len(name.split('/')) > 1:
+                continue
+            else:
+                root_folders.append(name_decodeing)
+
+        # 메일 박스 리스트 출력 확인
+        # print(root_folders)
+
+        # 메일 박스 확인
+        if config_email['mail_box'] == '전체메일':
+            selected_mail_box = 'INBOX'
+        else:
+            if config_email['mail_box'] not in root_folders:
+                print(f"[EMAIL] \"{config_email['mail_box']}\" 메일함이 없습니다.")
+                return False
+            else:
+                selected_mail_box = imap_utf7.encode(config_email['mail_box'])
+
+        # 획득 할 메일 폴더 설정
+        imapserver.select(selected_mail_box)
+
+        # 메일 리스트 획득
         res, unseen_data = imapserver.search(None, 'ALL')
         ids = unseen_data[0]
         id_list = ids.split()
-
-        email_count = -int(config['get_count'])
+        email_count = -int(config_email['get_count'])
         latest_email_id = id_list[email_count:]
         latest_email_id.reverse()
 
@@ -106,7 +143,7 @@ def check_mail_imap(html_file_name, user, password):
             else:
                 to_data.append("")
         except Exception as ex:
-            print('[오류] :', ex, 'email data[To]', email_message['To'])
+            print('[EMAIL] :', ex, 'email data[To]', email_message['To'])
             to_data=['', '']
 
         # 발신자 데이터 파싱
@@ -120,7 +157,7 @@ def check_mail_imap(html_file_name, user, password):
             else:
                 from_data.append("")
         except Exception as ex:
-            print('[오류] :', ex, 'email data[From] > ', email_message['From'])
+            print('[EMAIL] :', ex, 'email data[From] > ', email_message['From'])
             from_data = ['', '']
 
         # print('email To:',  email_message['To'])
@@ -156,7 +193,7 @@ def check_mail_imap(html_file_name, user, password):
                 email_decoding['Date'] = f"{datetime.datetime.strptime(date_myformat, '%d %b %Y %H:%M:%S')}"
             except Exception as ex:
                 email_decoding['Date'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                print('[오류] :', ex)
+                print('[EMAIL] :', ex)
         else:
             email_decoding['Date'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -196,7 +233,7 @@ def check_mail_imap(html_file_name, user, password):
     # print(data_main)
 
     # 파일 저장
-    f = open(html_file_name, "w", encoding="utf-8")
+    f = open(config_email['output_file'], "w", encoding="utf-8")
     f.write(data_main)
     f.close()
 
@@ -207,21 +244,42 @@ def check_mail_imap(html_file_name, user, password):
     return True
 
 
+def parse_mailbox(data):
+    flags, b, c = data.partition(' ')
+    separator, b, name = c.partition(' ')
+    return flags, separator.replace('"', ''), name.replace('"', '')
+
+
+def subdirectory(folders):
+    #For directories 'Deleted Items', 'Sent Items', etc. with whitespaces,
+    #the name of the directory needs to be passed with double quotes, hence '"' + name + '"'
+    # obj를 imap 서버를 입력으로 받아야함
+    test, folders = obj.list('""', '"' + name + '/*"')
+    if(folders is not None):
+        print('Subdirectory exists') # you can also call parse_mailbox to find the name of sub-directory
+
+
 def upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, local_file_name , upload_file_name):
-    # Open a transport
-    transport = paramiko.Transport((ftp_ip, ftp_port))
 
-    # Auth
-    transport.connect(username=ftp_id, password=ftp_pw)
-    sftp = paramiko.SFTPClient.from_transport(transport)
+    try:
+        # Open a transport
+        transport = paramiko.Transport((ftp_ip, ftp_port))
 
-    # upload
-    sftp.put(local_file_name, upload_file_name)
+        # Auth
+        transport.connect(username=ftp_id, password=ftp_pw)
+        sftp = paramiko.SFTPClient.from_transport(transport)
 
-    # Close
-    sftp.close()
-    transport.close()
+        # upload
+        sftp.put(local_file_name, upload_file_name)
 
+        # Close
+        sftp.close()
+        transport.close()
+
+    except Exception as ex:
+        print('[FTP] :', ex)
+
+    # 일반 FTP
     # ftp = ftplib.FTP()
     # ftp.connect(ftp_ip, ftp_port)
     # ftp.login(ftp_id, ftp_pw)
@@ -245,30 +303,44 @@ def job():
     config_email = load_conf('EMAIL')
     config_ftp = load_conf('FTP')
 
-    # email 설정
-    email_id = config_email['id']
-    email_pw = config_email['pw']
-
-    # email 생성 파일명
-    email_file_name = config_email['file_name']
-
-    # email html 파일 생성
+    # 전역 변수 정의
     global gb_count
+    global gb_login_status
     gb_count = gb_count + 1
 
+    # 스케줄러 카운트
     print(f'[{datetime.datetime.today()}] 생성횟수 : {gb_count}', sep='')
-    global gb_login_status
-    gb_login_status = check_mail_imap(email_file_name, email_id, email_pw)
 
-    # email 파일 복사
-    if int(config_ftp['use']) == 1:
-        # ftp 설정 로드
-        ftp_ip = config_ftp['ip']
-        ftp_port = int(config_ftp['port'])
-        ftp_id = config_ftp['id']
-        ftp_pw = config_ftp['pw']
-        upload_file_name = config_ftp['upload_file_name']
-        upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, email_file_name, upload_file_name)
+    # 메일 박스 목록 생성
+    mail_box_list = config_email['mail_box'].split(',')
+    cnt = 0
+    for mail_box in mail_box_list:
+        # 카운트
+        cnt = cnt + 1
+
+        # 파일명 정의
+        output_file_path = f"{config_email['output_folder']}{config_email['output_file']}_{cnt}.html"
+
+        # 메일 조회
+        gb_login_status = create_email_imap(config_email['imap_srv'],
+                                            config_email['imap_port'],
+                                            config_email['id'],
+                                            config_email['pw'],
+                                            mail_box,
+                                            config_email['get_count'],
+                                            output_file_path)
+
+        # email 파일 복사
+        if int(config_ftp['use']) == 1:
+            # ftp 설정 로드
+            ftp_ip = config_ftp['ip']
+            ftp_port = int(config_ftp['port'])
+            ftp_id = config_ftp['id']
+            ftp_pw = config_ftp['pw']
+
+            # 파일명 정의
+            upload_file_path = f"{config_ftp['upload_folder']}{config_email['output_file']}_{cnt}.html"
+            upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, output_file_path, upload_file_path)
 
 
 if __name__ == '__main__':
