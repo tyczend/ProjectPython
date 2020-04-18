@@ -271,13 +271,14 @@ def upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, local_file_name, upload_file_na
 
     try:
         # Open a transport
-        transport = paramiko.Transport(ftp_ip, ftp_port)
+        transport = paramiko.Transport((ftp_ip, ftp_port))
 
         # Auth
         transport.connect(username=ftp_id, password=ftp_pw)
         sftp = paramiko.SFTPClient.from_transport(transport)
 
         # upload
+        print(local_file_name, upload_file_name)
         sftp.put(local_file_name, upload_file_name)
 
         # Close
