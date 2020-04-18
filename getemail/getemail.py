@@ -42,19 +42,19 @@ def find_encoding_info(txt):
 
 
 # 메일을 생성 (imap4)
-def create_email_imap(imap_srv, imap_port, id, pw, mail_box, get_count, output_file):
+def create_email_imap(imap_srv, imap_port, imap_id, imap_pw, mail_box, get_count, output_file):
 
     # define mail config
     config_email = dict()
     config_email['imap_srv'] = imap_srv
     config_email['imap_port'] = imap_port
-    config_email['id'] = id
-    config_email['pw'] = pw
+    config_email['id'] = imap_id
+    config_email['pw'] = imap_pw
     config_email['mail_box'] = mail_box
     config_email['get_count'] = get_count
     config_email['output_file'] = output_file
 
-    try :
+    try:
         # imap server 접속
         imapsrv = config_email['imap_srv']
         imapserver = imaplib.IMAP4_SSL(imapsrv, int(config_email['imap_port']))
@@ -112,7 +112,7 @@ def create_email_imap(imap_srv, imap_port, id, pw, mail_box, get_count, output_f
 
     # 템플릿 로드
     f = open("./template_table.html", 'r', encoding="utf-8")
-    template_table_html= f.read()
+    template_table_html = f.read()
     f.close()
 
     # 카운트
@@ -128,6 +128,7 @@ def create_email_imap(imap_srv, imap_port, id, pw, mail_box, get_count, output_f
 
         # 메일의 key 값 출력
         # print(list(email_message.keys()))
+        # print(email_message['Received'])
 
         # 메일 데이터
         email_decoding = dict()
@@ -144,7 +145,7 @@ def create_email_imap(imap_srv, imap_port, id, pw, mail_box, get_count, output_f
                 to_data.append("")
         except Exception as ex:
             print('[EMAIL] :', ex, 'email data[To]', email_message['To'])
-            to_data=['', '']
+            to_data = ['', '']
 
         # 발신자 데이터 파싱
         try:
@@ -205,7 +206,11 @@ def create_email_imap(imap_srv, imap_port, id, pw, mail_box, get_count, output_f
         # print(email_decoding['Date'])
 
         # HTML 변환
-        if email_decoding['Date'] is not None and email_decoding['FromName'] is not None and email_decoding['FromEmail'] is not None and email_decoding['Subject'] is not None:
+        data_table = ''
+        if email_decoding['Date'] is not None and \
+                email_decoding['FromName'] is not None and \
+                email_decoding['FromEmail'] is not None and \
+                email_decoding['Subject'] is not None:
             data_table = template_table_html
             data_table = data_table.replace("##No##", str(cnt))
             data_table = data_table.replace("##Date##", email_decoding['Date'])
@@ -250,20 +255,23 @@ def parse_mailbox(data):
     return flags, separator.replace('"', ''), name.replace('"', '')
 
 
+"""
 def subdirectory(folders):
     #For directories 'Deleted Items', 'Sent Items', etc. with whitespaces,
     #the name of the directory needs to be passed with double quotes, hence '"' + name + '"'
     # obj를 imap 서버를 입력으로 받아야함
+
     test, folders = obj.list('""', '"' + name + '/*"')
     if(folders is not None):
         print('Subdirectory exists') # you can also call parse_mailbox to find the name of sub-directory
+"""
 
 
-def upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, local_file_name , upload_file_name):
+def upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, local_file_name, upload_file_name):
 
     try:
         # Open a transport
-        transport = paramiko.Transport((ftp_ip, ftp_port))
+        transport = paramiko.Transport(ftp_ip, ftp_port)
 
         # Auth
         transport.connect(username=ftp_id, password=ftp_pw)
@@ -293,9 +301,9 @@ def upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, local_file_name , upload_file_n
 
 def load_conf(type_name):
     # 설정 로드
-    config = configparser.ConfigParser()
-    config.read('./getemail.conf', encoding='utf-8')
-    return config[type_name]
+    config_data = configparser.ConfigParser()
+    config_data.read('./getemail.conf', encoding='utf-8')
+    return config_data[type_name]
 
 
 def job():
@@ -367,4 +375,4 @@ if __name__ == '__main__':
         # 종료 처리
         if not gb_login_status:
             print("오류로 인하여 스케줄링을 종료 합니다.")
-            break;
+            break
