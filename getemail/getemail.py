@@ -278,7 +278,6 @@ def upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, local_file_name, upload_file_na
         sftp = paramiko.SFTPClient.from_transport(transport)
 
         # upload
-        print(local_file_name, upload_file_name)
         sftp.put(local_file_name, upload_file_name)
 
         # Close
