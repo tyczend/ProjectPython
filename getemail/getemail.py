@@ -65,17 +65,23 @@ def create_email_imap(imap_srv, imap_port, imap_id, imap_pw, mail_box, get_count
         res, mail_boxs = imapserver.list('""', '*')
         for mbox in mail_boxs:
             flags, separator, name = parse_mailbox(bytes.decode(mbox))
-            # print(f'{name_decodeing} {name}    : [Flags = {flags}; Separator = {separator}')
 
             # imap utf7 타입으로 디코딩
             name_decodeing = imap_utf7.decode(name.encode())
-            if len(name.split('/')) > 1:
-                continue
-            else:
-                root_folders.append(name_decodeing)
+            # print(f'{name_decodeing} {name}    : [Flags = {flags}; Separator = {separator}')
+
+            # 폴더명 구분
+            # if len(name.split('/')) > 1:
+
+            # 폴더 리스트 추가
+            root_folders.append(name_decodeing)
+
+            # 서브 디렉토리 탐색
+            # sub = subdirectory(imapserver, name)
+            # print('sub:', sub)
 
         # 메일 박스 리스트 출력 확인
-        # print(root_folders)
+        # print('root:', root_folders)
 
         # 메일 박스 확인
         if config_email['mail_box'] == '전체메일':
@@ -85,7 +91,9 @@ def create_email_imap(imap_srv, imap_port, imap_id, imap_pw, mail_box, get_count
                 print(f"[EMAIL] \"{config_email['mail_box']}\" 메일함이 없습니다.")
                 return False
             else:
+                print(f"[EMAIL] \"{config_email['mail_box']}\" 메일함이 선택되었습니다.")
                 selected_mail_box = imap_utf7.encode(config_email['mail_box'])
+
 
         # 획득 할 메일 폴더 설정
         imapserver.select(selected_mail_box)
@@ -144,7 +152,7 @@ def create_email_imap(imap_srv, imap_port, imap_id, imap_pw, mail_box, get_count
             else:
                 to_data.append("")
         except Exception as ex:
-            print('[EMAIL] :', ex, 'email data[To]', email_message['To'])
+            print('[error] :', ex, 'email data[To]', email_message['To'])
             to_data = ['', '']
 
         # 발신자 데이터 파싱
@@ -158,7 +166,7 @@ def create_email_imap(imap_srv, imap_port, imap_id, imap_pw, mail_box, get_count
             else:
                 from_data.append("")
         except Exception as ex:
-            print('[EMAIL] :', ex, 'email data[From] > ', email_message['From'])
+            print('[error] :', ex, 'email data[From] > ', email_message['From'])
             from_data = ['', '']
 
         # print('email To:',  email_message['To'])
@@ -194,7 +202,7 @@ def create_email_imap(imap_srv, imap_port, imap_id, imap_pw, mail_box, get_count
                 email_decoding['Date'] = f"{datetime.datetime.strptime(date_myformat, '%d %b %Y %H:%M:%S')}"
             except Exception as ex:
                 email_decoding['Date'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                print('[EMAIL] :', ex)
+                print('[error] :', ex)
         else:
             email_decoding['Date'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -255,16 +263,23 @@ def parse_mailbox(data):
     return flags, separator.replace('"', ''), name.replace('"', '')
 
 
-"""
-def subdirectory(folders):
-    #For directories 'Deleted Items', 'Sent Items', etc. with whitespaces,
-    #the name of the directory needs to be passed with double quotes, hence '"' + name + '"'
-    # obj를 imap 서버를 입력으로 받아야함
-
+def subdirectory(obj, name):
     test, folders = obj.list('""', '"' + name + '/*"')
-    if(folders is not None):
-        print('Subdirectory exists') # you can also call parse_mailbox to find the name of sub-directory
-"""
+
+    sub_folders = []
+    for item in folders:
+        if item is None:
+            print('Subdirectory is None')
+            break
+
+        # imap utf7 타입으로 디코딩
+        flags, separator, name = parse_mailbox(bytes.decode(item))
+        name_decodeing = imap_utf7.decode(name.encode())
+
+        # 폴더 리스트 추가
+        sub_folders.append(name_decodeing)
+
+    return sub_folders
 
 
 def upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, local_file_name, upload_file_name):
@@ -317,7 +332,7 @@ def job():
     gb_count = gb_count + 1
 
     # 스케줄러 카운트
-    print(f'[{datetime.datetime.today()}] 생성횟수 : {gb_count}', sep='')
+    print(f'[{datetime.datetime.today()}] 메일 목록 생성을 시작합니다.. : {gb_count}', sep='')
 
     # 메일 박스 목록 생성
     mail_box_list = config_email['mail_box'].split(',')
@@ -349,6 +364,9 @@ def job():
             # 파일명 정의
             upload_file_path = f"{config_ftp['upload_folder']}{config_email['output_file']}_{cnt}.html"
             upload_ftp(ftp_ip, ftp_port, ftp_id, ftp_pw, output_file_path, upload_file_path)
+
+    # 스케줄러 카운트
+    print(f'[{datetime.datetime.today()}] 메일 목록 생성을 완료하였습니다.')
 
 
 if __name__ == '__main__':
