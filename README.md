@@ -12,7 +12,9 @@
 
 - ### getemail
 
-  이메일의 목록을 가져와서 html 파일을 생성
+  IMAP4을 이용하여 메일 제목 목록을 스케줄에 맞게 주기적으로 생성하는 모듈입니다.
+  생성 파일되는 파일은 템플릿 파일을 참조하여 HTML 파일을 생성합니다.
+  
   - getmail.py : 실행 코드
   - getmail.conf : 설정 파일
   - template_main.html : html 템플릿 - 메인
