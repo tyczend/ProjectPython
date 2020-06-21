@@ -12,12 +12,16 @@
 
 - ### getemail
 
-  이메일의 목록을 가져와서 html 파일을 생성
+  IMAP4을 이용하여 메일 제목을 HTML 파일로 생성하는 모듈입니다.<br>
+  HTML 템플릿, 스케줄링, FTP 업로드, 메일함 별 파일 저장 기능을 가지고 있습니다.<br>
+  
+- #### 파일 설명
   - getmail.py : 실행 코드
   - getmail.conf : 설정 파일
-  - template_main.html : html 템플릿 - 메인
-  - template_table.html : html 템플릿 - 테이블
+  - template_main.html : HTML 템플릿 - 메인
+  - template_table.html : HTML 템플릿 - 테이블
     
+- #### HTML 템플릿의 tag 정의
     | HTML tag          | 설명               |
     | :---------------- | :----------------: |
     | \##No##           | 번호               |
